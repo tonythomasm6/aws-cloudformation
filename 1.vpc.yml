@@ -58,7 +58,7 @@ Resources:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
       CidrBlock: !FindInMap [ RegionMap, !Ref Region, PublicSubnet1CidrBlock ]
-      MapPublicIpOnLaunch: false
+      MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
           Value: !Sub "${ProjectName}PublicSubnet1"
