@@ -1,0 +1,119 @@
+Description: Deploy EC2 instance in ASG 
+
+Parameters:
+  MinInstance:
+    Type: Number
+    Default: 1
+    Description: ASG Minimum instance
+
+  MaxInstance:
+    Type: Number
+    Default: 1
+    Description: ASG Maximum instance
+
+  InstanceType:
+    Type: String
+    Default: t2.nano
+    Description: EC2 Instance type to be used for deployment
+  
+  ProjectName:
+    Description: Name of the project
+    Type: String
+    Default: ""
+  
+  # instance to be selected based on env
+  Environment:
+    Type: String
+    Default: dev
+
+Resources:
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}InstanceRole"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: 
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole 
+  
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${ProjectName}InstanceProfile"
+      Roles:
+        - !Ref InstanceRole 
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup 
+    Properties:
+      GroupDescription: Security group for EC2 instances
+      GroupName: !Sub "${ProjectName}SecurityGroup"
+      VpcId: !ImportValue VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      # SecurityGroupEgress:
+      #   - IpProtocol: tcp
+      #     FromPort: 8
+
+
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt
+            - InstanceProfile
+            - Arn
+        ImageId: ami-04b3f96fa99d40135
+        InstanceType: !Ref InstanceType
+        SecurityGroupIds:
+          - !Ref InstanceSecurityGroup
+        EbsOptimized: "true"
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub "${ProjectName}LaunchTemplate"
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${ProjectName}TargetGroup"
+      Protocol: HTTP 
+      HealthCheckPath: "/health.html"
+      Port: 80
+      VpcId: !ImportValue VPC
+      #Optional
+      HealthCheckIntervalSeconds: 60
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:  #ToDo : Learn detail
+        WillReplace: true
+    Properties:
+      AutoScalingGroupName: !Sub "${ProjectName}ASG"
+      VPCZoneIdentifier:
+        - Fn::ImportValue: 
+            Fn::Sub: "${ProjectName}PrivateSubnet1"
+        - Fn::ImportValue: 
+            Fn::Sub: "${ProjectName}PrivateSubnet2"
+        - Fn::ImportValue: 
+            Fn::Sub: "${ProjectName}PrivateSubnet3"
+      TargetGroupARNs: [!Ref TargetGroup]
+      MinSize: !Ref MinInstance
+      MaxSize: !Ref MaxInstance
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}Instance"
+          PropagateAtLaunch: true
