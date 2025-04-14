@@ -39,6 +39,8 @@ Resources:
             Principal: 
               Service: ec2.amazonaws.com
             Action: sts:AssumeRole 
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
   
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -51,13 +53,13 @@ Resources:
     Type: AWS::EC2::SecurityGroup 
     Properties:
       GroupDescription: Security group for EC2 instances
-      GroupName: !Sub "${ProjectName}SecurityGroup"
+      GroupName: !Sub "${ProjectName}InstanceSecurityGroup"
       VpcId: !ImportValue VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          CidrIp: 0.0.0.0/0
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
       # SecurityGroupEgress:
       #   - IpProtocol: tcp
       #     FromPort: 8
@@ -117,3 +119,47 @@ Resources:
         - Key: Name
           Value: !Sub "${ProjectName}Instance"
           PropagateAtLaunch: true
+  
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup 
+    Properties:
+      GroupDescription: Security group for ALB instances
+      GroupName: !Sub "${ProjectName}ALBSecurityGroup"
+      VpcId: !ImportValue VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      # SecurityGroupEgress:
+      #   - IpProtocol: tcp
+      #     FromPort: 8
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${ProjectName}ALB"
+      Subnets:
+        - Fn::ImportValue: 
+            Fn::Sub: "${ProjectName}PublicSubnet1"
+        - Fn::ImportValue: 
+            Fn::Sub: "${ProjectName}PublicSubnet2"
+        - Fn::ImportValue: 
+            Fn::Sub: "${ProjectName}PublicSubnet3"
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '360'
+      SecurityGroups: [!Ref ALBSecurityGroup]
+      Type: application
+      IpAddressType: ipv4
+
+  LoadbalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener 
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
