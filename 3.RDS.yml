@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Free-tier MySQL RDS instance with credentials in Secrets Manager
+
+Parameters:
+  DBUsername:
+    Description: Master database username
+    Type: String
+    Default: admin
+  DBPassword:
+    Description: Master database password (min 8 chars)
+    Type: String
+    NoEcho: true
+    MinLength: 8
+
+Resources:
+
+  MyDBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: my-db-secret
+      Description: RDS credentials for MySQL
+      SecretString: !Sub |
+        {
+          "username": "${DBUsername}",
+          "password": "${DBPassword}"
+        }
+
+  MyDBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: DemoDB
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: 20
+      Engine: mysql
+      EngineVersion: 8.0.35
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      PubliclyAccessible: false
+      BackupRetentionPeriod: 1
+      DBName: myappdb
+      DeletionProtection: false
+      StorageType: gp2
+      MultiAZ: false
+      VPCSecurityGroups:
+        - !GetAtt MyDBSecurityGroup.GroupId
+      DBSubnetGroupName: !Ref MyDBSubnetGroup
+
+  MyDBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow RDS access
+      VpcId: vpc-02f219d961eb4b041  # <- Replace with your VPC ID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 0.0.0.0/0   # 👈 Replace with your app's IP/CIDR for security
+
+  MyDBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnets for RDS
+      SubnetIds:
+        - subnet-06553585f16b2cb1e    # <- Replace with your private subnet ID 1
+        - subnet-05c4cbc0633d4fef9    # <- Replace with your private subnet ID 2
+        - subnet-01aff03483b83fbc6
+
+Outputs:
+
+  RDSInstanceEndpoint:
+    Description: RDS endpoint URL
+    Value: !GetAtt MyDBInstance.Endpoint.Address
+    Export:
+      Name: MyRDSInstanceEndpoint
+
+  RDSSecretArn:
+    Description: ARN of the Secrets Manager secret
+    Value: !Ref MyDBSecret
+    Export:
+      Name: MyRDSSecretArn

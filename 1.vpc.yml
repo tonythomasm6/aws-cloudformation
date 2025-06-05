@@ -151,7 +151,7 @@ Resources:
       SubnetId: !Ref PublicSubnet2 
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}NAT1"
+          Value: !Sub "${ProjectName}NAT2"
 
   NatGateway3:
     Type: AWS::EC2::NatGateway 
@@ -160,7 +160,7 @@ Resources:
       SubnetId: !Ref PublicSubnet3  
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}NAT1"
+          Value: !Sub "${ProjectName}NAT3"
 
   # Public Route Table
   PublicRouteTable:

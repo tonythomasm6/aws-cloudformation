@@ -41,6 +41,15 @@ Resources:
             Action: sts:AssumeRole 
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue MyRDSSecretArn
   
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -83,6 +92,43 @@ Resources:
             Tags:
               - Key: Name
                 Value: !Sub "${ProjectName}LaunchTemplate"
+        UserData:
+          Fn::Base64:
+            !Sub |
+              #!/bin/bash
+              yum update -y
+              yum install -y httpd jq
+              systemctl start httpd
+              systemctl enable httpd
+              echo "Success" > /var/www/html/health.html
+
+              # Install MySQL client
+              sudo yum install -y mariadb105
+
+              # Get database credentials from Secrets Manager
+              SECRET_ARN=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} --query 'Stacks[0].Outputs[?OutputKey==`MyRDSSecretArn`].OutputValue' --output text)
+              #Region to be updated with env variable
+              CREDENTIALS=$(aws secretsmanager get-secret-value --secret-id $SECRET_ARN --region ap-southeast-2 --query SecretString --output text)
+              DB_USER=$(echo $CREDENTIALS | jq -r '.username')
+              DB_PASS=$(echo $CREDENTIALS | jq -r '.password')
+              RDS_ENDPOINT="demodb.crmymgwgyggl.ap-southeast-2.rds.amazonaws.com"
+              RDS_PORT=3306
+              DB_NAME="myappdb"
+              echo "<br>Database Username: $DB_USER" >> /var/www/html/health.html
+              echo "<br>Database Password: $DB_PASS" >> /var/www/html/health.html
+              # Test connection
+              mysql -h "$RDS_ENDPOINT" -P "$RDS_PORT" -u "$DB_USER" -p"$DB_PASS" -e "USE $DB_NAME;" > /tmp/mysql_test.log 2>&1
+
+              if [ $? -eq 0 ]; then
+                echo "MySQL connection SUCCESSFUL" | tee /var/log/user-data.log
+                echo "<br>MySQL Connection: SUCCESSFUL" >> /var/www/html/health.html
+              else
+                echo "MySQL connection FAILED" | tee /var/log/user-data.log
+                echo "<br>MySQL Connection: FAILED" >> /var/www/html/health.html
+                cat /tmp/mysql_test.log >> /var/log/user-data.log
+              fi
+
+        
 
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
