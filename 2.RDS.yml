@@ -11,6 +11,10 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 8
+  ProjectName:
+    Description: Name of the project
+    Type: String
+    Default: ""
 
 Resources:
 
@@ -36,7 +40,7 @@ Resources:
       MasterUsername: !Ref DBUsername
       MasterUserPassword: !Ref DBPassword
       PubliclyAccessible: false
-      BackupRetentionPeriod: 1
+      BackupRetentionPeriod: 0
       DBName: myappdb
       DeletionProtection: false
       StorageType: gp2
@@ -49,21 +53,24 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allow RDS access
-      VpcId: vpc-02f219d961eb4b041  # <- Replace with your VPC ID
+      VpcId: !ImportValue VPC  
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 3306
           ToPort: 3306
-          CidrIp: 0.0.0.0/0   # 👈 Replace with your app's IP/CIDR for security
+          CidrIp: 10.0.0.0/16   #ToDo: Update with export value not hardcoded (Replace with instance sg)
 
   MyDBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
       DBSubnetGroupDescription: Subnets for RDS
       SubnetIds:
-        - subnet-06553585f16b2cb1e    # <- Replace with your private subnet ID 1
-        - subnet-05c4cbc0633d4fef9    # <- Replace with your private subnet ID 2
-        - subnet-01aff03483b83fbc6
+        - Fn::ImportValue: 
+            Fn::Sub: "${ProjectName}PrivateSubnet1"
+        - Fn::ImportValue: 
+            Fn::Sub: "${ProjectName}PrivateSubnet2"
+        - Fn::ImportValue: 
+            Fn::Sub: "${ProjectName}PrivateSubnet3"
 
 Outputs:
 
