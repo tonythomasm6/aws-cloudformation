@@ -20,6 +20,8 @@ Resources:
 
   MyDBSecret:
     Type: AWS::SecretsManager::Secret
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       Name: my-db-secret
       Description: RDS credentials for MySQL
@@ -31,6 +33,7 @@ Resources:
 
   MyDBInstance:
     Type: AWS::RDS::DBInstance
+    UpdateReplacePolicy: Delete
     Properties:
       DBInstanceIdentifier: DemoDB
       DBInstanceClass: db.t3.micro
@@ -48,6 +51,16 @@ Resources:
       VPCSecurityGroups:
         - !GetAtt MyDBSecurityGroup.GroupId
       DBSubnetGroupName: !Ref MyDBSubnetGroup
+
+  RDSDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z05736022TWK3R2C91ZQB
+      Name: !Sub "${ProjectName}-rds.tonythomasm.com"
+      Type: CNAME
+      TTL: 60
+      ResourceRecords:
+        - !GetAtt MyDBInstance.Endpoint.Address
 
   MyDBSecurityGroup:
     Type: AWS::EC2::SecurityGroup

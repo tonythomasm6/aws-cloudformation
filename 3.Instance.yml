@@ -21,11 +21,6 @@ Parameters:
     Type: String
     Default: ""
   
-  # instance to be selected based on env
-  Environment:
-    Type: String
-    Default: dev
-
   CertificateArn:
     Type: String
     Description: ARN of the SSL certificate in ACM
@@ -116,7 +111,7 @@ Resources:
               CREDENTIALS=$(aws secretsmanager get-secret-value --secret-id $SECRET_ARN --region us-east-1 --query SecretString --output text)
               DB_USER=$(echo $CREDENTIALS | jq -r '.username')
               DB_PASS=$(echo $CREDENTIALS | jq -r '.password')
-              RDS_ENDPOINT="demodb.c5g4skkae823.us-east-1.rds.amazonaws.com"  
+              RDS_ENDPOINT="demo-rds.tonythomasm.com"  
               RDS_PORT=3306
               DB_NAME="myappdb"
               echo "<br>Database Username: $DB_USER" >> /var/www/html/health.html
@@ -205,6 +200,16 @@ Resources:
       SecurityGroups: [!Ref ALBSecurityGroup]
       Type: application
       IpAddressType: ipv4
+
+  ALBDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z05736022TWK3R2C91ZQB
+      Name: !Sub "${ProjectName}-alb.tonythomasm.com"
+      Type: CNAME
+      TTL: 60
+      ResourceRecords:
+        - !GetAtt LoadBalancer.DNSName
 
   # HTTP Listener (Redirects to HTTPS)
   HTTPListener:
