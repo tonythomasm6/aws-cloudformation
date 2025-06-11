@@ -16,21 +16,17 @@ Parameters:
     Default: t2.nano
     Description: EC2 Instance type to be used for deployment
   
-  ProjectName:
-    Description: Name of the project
-    Type: String
-    Default: ""
-  
   CertificateArn:
     Type: String
     Description: ARN of the SSL certificate in ACM
+    Default: arn:aws:acm:us-east-1:225593105905:certificate/fe8d8325-f0e0-4fcb-96a0-17cd1b42e519
 
 Resources:
 
   InstanceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${ProjectName}InstanceRole"
+      RoleName: InstanceRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -48,12 +44,12 @@ Resources:
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
-                Resource: !ImportValue MyRDSSecretArn
+                Resource: "*"
   
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      InstanceProfileName: !Sub "${ProjectName}InstanceProfile"
+      InstanceProfileName: InstanceProfile
       Roles:
         - !Ref InstanceRole 
 
@@ -61,16 +57,13 @@ Resources:
     Type: AWS::EC2::SecurityGroup 
     Properties:
       GroupDescription: Security group for EC2 instances
-      GroupName: !Sub "${ProjectName}InstanceSecurityGroup"
+      GroupName: InstanceSecurityGroup
       VpcId: !ImportValue VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
           SourceSecurityGroupId: !Ref ALBSecurityGroup
-      # SecurityGroupEgress:
-      #   - IpProtocol: tcp
-      #     FromPort: 8
 
 
   LaunchTemplate:
@@ -90,7 +83,7 @@ Resources:
           - ResourceType: instance
             Tags:
               - Key: Name
-                Value: !Sub "${ProjectName}LaunchTemplate"
+                Value: LaunchTemplate
         #ToDo : RDS endpoint        
         UserData:
           Fn::Base64:
@@ -102,38 +95,38 @@ Resources:
               systemctl enable httpd
               echo "Success" > /var/www/html/health.html
 
-              # Install MySQL client
-              sudo yum install -y mariadb
+              # # Install MySQL client
+              # sudo yum install -y mariadb
 
-              # Get database credentials from Secrets Manager
-              SECRET_ARN=arn:aws:secretsmanager:us-east-1:225593105905:secret:my-db-secret-DZbb2X
-              #Region to be updated with env variable
-              CREDENTIALS=$(aws secretsmanager get-secret-value --secret-id $SECRET_ARN --region us-east-1 --query SecretString --output text)
-              DB_USER=$(echo $CREDENTIALS | jq -r '.username')
-              DB_PASS=$(echo $CREDENTIALS | jq -r '.password')
-              RDS_ENDPOINT="demo-rds.tonythomasm.com"  
-              RDS_PORT=3306
-              DB_NAME="myappdb"
-              echo "<br>Database Username: $DB_USER" >> /var/www/html/health.html
-              echo "<br>Database Password: $DB_PASS" >> /var/www/html/health.html
-              # Test connection
-              mysql -h "$RDS_ENDPOINT" -P "$RDS_PORT" -u "$DB_USER" -p"$DB_PASS" -e "USE $DB_NAME;" > /tmp/mysql_test.log 2>&1
+              # # Get database credentials from Secrets Manager
+              # SECRET_ARN=arn:aws:secretsmanager:us-east-1:225593105905:secret:my-db-secret-DZbb2X
+              # #Region to be updated with env variable
+              # CREDENTIALS=$(aws secretsmanager get-secret-value --secret-id $SECRET_ARN --region us-east-1 --query SecretString --output text)
+              # DB_USER=$(echo $CREDENTIALS | jq -r '.username')
+              # DB_PASS=$(echo $CREDENTIALS | jq -r '.password')
+              # RDS_ENDPOINT="rds.tonythomasm.com"  
+              # RDS_PORT=3306
+              # DB_NAME="myappdb"
+              # echo "<br>Database Username: $DB_USER" >> /var/www/html/health.html
+              # echo "<br>Database Password: $DB_PASS" >> /var/www/html/health.html
+              # # Test connection
+              # mysql -h "$RDS_ENDPOINT" -P "$RDS_PORT" -u "$DB_USER" -p"$DB_PASS" -e "USE $DB_NAME;" > /tmp/mysql_test.log 2>&1
 
-              if [ $? -eq 0 ]; then
-                echo "MySQL connection SUCCESSFUL" | tee /var/log/user-data.log
-                echo "<br>MySQL Connection: SUCCESSFUL" >> /var/www/html/health.html
-              else
-                echo "MySQL connection FAILED" | tee /var/log/user-data.log
-                echo "<br>MySQL Connection: FAILED" >> /var/www/html/health.html
-                cat /tmp/mysql_test.log >> /var/log/user-data.log
-              fi
+              # if [ $? -eq 0 ]; then
+              #   echo "MySQL connection SUCCESSFUL" | tee /var/log/user-data.log
+              #   echo "<br>MySQL Connection: SUCCESSFUL" >> /var/www/html/health.html
+              # else
+              #   echo "MySQL connection FAILED" | tee /var/log/user-data.log
+              #   echo "<br>MySQL Connection: FAILED" >> /var/www/html/health.html
+              #   cat /tmp/mysql_test.log >> /var/log/user-data.log
+              # fi
 
         
 
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      Name: !Sub "${ProjectName}TargetGroup"
+      Name: TargetGroup
       Protocol: HTTP 
       HealthCheckPath: "/health.html"
       Port: 80
@@ -149,12 +142,9 @@ Resources:
     Properties:
       # AutoScalingGroupName: !Sub "${ProjectName}ASG"
       VPCZoneIdentifier:
-        - Fn::ImportValue: 
-            Fn::Sub: "${ProjectName}PrivateSubnet1"
-        - Fn::ImportValue: 
-            Fn::Sub: "${ProjectName}PrivateSubnet2"
-        - Fn::ImportValue: 
-            Fn::Sub: "${ProjectName}PrivateSubnet3"
+        - !ImportValue PrivateSubnet1
+        - !ImportValue PrivateSubnet2
+        - !ImportValue PrivateSubnet3
       TargetGroupARNs: [!Ref TargetGroup]
       MinSize: !Ref MinInstance
       MaxSize: !Ref MaxInstance
@@ -163,14 +153,14 @@ Resources:
         Version: !GetAtt LaunchTemplate.LatestVersionNumber
       Tags:
         - Key: Name
-          Value: !Sub "${ProjectName}Instance"
+          Value: Instance
           PropagateAtLaunch: true
   
   ALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup 
     Properties:
       GroupDescription: Security group for ALB instances
-      GroupName: !Sub "${ProjectName}ALBSecurityGroup"
+      GroupName: ALBSecurityGroup
       VpcId: !ImportValue VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -185,14 +175,11 @@ Resources:
   LoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: !Sub "${ProjectName}ALB"
+      Name: ALB
       Subnets:
-        - Fn::ImportValue: 
-            Fn::Sub: "${ProjectName}PublicSubnet1"
-        - Fn::ImportValue: 
-            Fn::Sub: "${ProjectName}PublicSubnet2"
-        - Fn::ImportValue: 
-            Fn::Sub: "${ProjectName}PublicSubnet3"
+        - !ImportValue PublicSubnet1
+        - !ImportValue PublicSubnet2
+        - !ImportValue PublicSubnet3
       Scheme: internet-facing
       LoadBalancerAttributes:
         - Key: idle_timeout.timeout_seconds
@@ -205,7 +192,7 @@ Resources:
     Type: AWS::Route53::RecordSet
     Properties:
       HostedZoneId: Z05736022TWK3R2C91ZQB
-      Name: !Sub "${ProjectName}-alb.tonythomasm.com"
+      Name: alb.tonythomasm.com
       Type: CNAME
       TTL: 60
       ResourceRecords:
@@ -241,3 +228,12 @@ Resources:
       Port: 443
       Protocol: HTTPS
       SslPolicy: ELBSecurityPolicy-TLS-1-2-2017-01
+
+
+Outputs:
+
+  InstanceSecurityGroup:
+    Description: InstanceSecurityGroup
+    Value: !GetAtt InstanceSecurityGroup.GroupId
+    Export:
+      Name: InstanceSecurityGroup

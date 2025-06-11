@@ -1,0 +1,118 @@
+AWS Infrastructure Architecture
+============================
+
+1. VPC (1.vpc.yml)
+   - VPC with CIDR 10.0.0.0/16
+   - 3 Public Subnets (10.0.4.0/24, 10.0.5.0/24, 10.0.6.0/24)
+   - 3 Private Subnets (10.0.1.0/24, 10.0.2.0/24, 10.0.3.0/24)
+   - Internet Gateway for public internet access
+   - 3 NAT Gateways (one in each public subnet)
+   - Route Tables for public and private subnets
+   - Exports: VPC, PublicSubnet1-3, PrivateSubnet1-3
+
+2. EC2 Instances (2.Instance.yml)
+   - Auto Scaling Group with Launch Template
+   - Application Load Balancer (ALB) in public subnets
+   - Target Group for health checks
+   - Security Groups for ALB and instances
+   - IAM Role with SSM and Secrets Manager access
+   - HTTPS listener with SSL certificate
+   - HTTP to HTTPS redirect
+   - Route53 DNS record for ALB
+   - Exports: InstanceSecurityGroup
+
+3. Bastion Host (3.bastionhost.yml)
+   - EC2 instance in public subnet
+   - Security Group with SSH access
+   - IAM Role with SSM access
+   - Key Pair for SSH access
+   - SSM Parameters:
+     - JUMPBOX_KEYPAIR: Key pair reference
+     - JUMPBOX_IP: Public IP address
+   - Exports: BastionHostPublicIP, BastionHostSecurityGroupId
+
+4. RDS Database (4.RDS.yml)
+   - MySQL 8.0 RDS instance
+   - Multi-AZ deployment
+   - Security Group with access from instances and bastion
+   - Secrets Manager for credentials
+   - Route53 DNS record
+   - Exports: MyRDSInstanceEndpoint, MyRDSSecretArn
+
+Security Features:
+- HTTPS encryption for web traffic
+- Private subnets for application instances
+- Bastion host for secure access
+- IAM roles with least privilege
+- Secrets Manager for sensitive data
+- Security Groups with minimal access
+
+Monitoring:
+- Health checks for ALB
+- CloudWatch metrics for instances
+- RDS performance insights
+
+Deployment Order:
+1. VPC (1.vpc.yml)
+2. RDS (4.RDS.yml)
+3. Bastion Host (3.bastionhost.yml)
+4. Application (2.Instance.yml)
+
++----------------------------------------------------------------------------------------+
+|                                     AWS Cloud                                           |
+|  +----------------------------------------------------------------------------+        |
+|  |                                    VPC                                      |        |
+|  |  +------------------+  +------------------+  +------------------+           |        |
+|  |  |  Public Subnet   |  |  Private Subnet  |  |  Private Subnet  |           |        |
+|  |  |                  |  |                  |  |                  |           |        |
+|  |  | +-------------+  |  | +-------------+  |  | +-------------+  |           |        |
+|  |  | | Internet    |  |  | | EC2         |  |  | | RDS         |  |           |        |
+|  |  | | Gateway     |  |  | | Instance    |  |  | | Instance    |  |           |        |
+|  |  | +-------------+  |  | +-------------+  |  | +-------------+  |           |        |
+|  |  |        |        |  |        |        |  |        |        |           |        |
+|  |  | +-------------+  |  |        |        |  |        |        |           |        |
+|  |  | | NAT Gateway |  |  |        |        |  |        |        |           |        |
+|  |  | +-------------+  |  |        |        |  |        |        |           |        |
+|  |  |        |        |  |        |        |  |        |        |           |        |
+|  |  | +-------------+  |  |        |        |  |        |        |           |        |
+|  |  | | Bastion     |  |  |        |        |  |        |        |           |        |
+|  |  | | Host        |  |  |        |        |  |        |        |           |        |
+|  |  | +-------------+  |  |        |        |  |        |        |           |        |
+|  |  +------------------+  +------------------+  +------------------+           |        |
+|  |                                                                             |        |
+|  |  +------------------------------------------------------------------+      |        |
+|  |  |                        Security Groups                            |      |        |
+|  |  |  +-------------+  +-------------+  +-------------+                |      |        |
+|  |  |  | EC2 Security|  | RDS Security|  | Bastion     |                |      |        |
+|  |  |  | Group       |  | Group       |  | Security    |                |      |        |
+|  |  |  +-------------+  +-------------+  | Group       |                |      |        |
+|  |  |                                    +-------------+                |      |        |
+|  |  +------------------------------------------------------------------+      |        |
+|  +----------------------------------------------------------------------------+        |
++----------------------------------------------------------------------------------------+
+
+Flow Description:
+----------------
+1. Internet → Internet Gateway → Public Subnet
+2. Public Subnet → NAT Gateway → Private Subnets
+3. Bastion Host → EC2 Instances (for management)
+4. EC2 Instances → RDS Instance (application to database)
+5. Security Groups control access at each layer
+
+Security Groups:
+---------------
+- EC2 Security Group: Controls traffic to EC2 instances
+- RDS Security Group: Controls traffic to RDS instance
+- Bastion Security Group: Controls access to bastion host
+
+High Availability:
+-----------------
+- Resources distributed across multiple AZs
+- NAT Gateway provides redundancy
+- RDS configured for high availability
+
+Monitoring:
+----------
+- CloudWatch for monitoring and logging
+- AWS Systems Manager for instance management
+- AWS Config for compliance monitoring 

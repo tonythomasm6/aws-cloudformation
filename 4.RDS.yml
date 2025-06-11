@@ -11,19 +11,16 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 8
-  ProjectName:
-    Description: Name of the project
-    Type: String
-    Default: ""
+
 
 Resources:
-
+  # Only create new secret if ExistingSecretName is not provided
   MyDBSecret:
     Type: AWS::SecretsManager::Secret
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      Name: my-db-secret
+      Name: db-secret
       Description: RDS credentials for MySQL
       SecretString: !Sub |
         {
@@ -31,11 +28,12 @@ Resources:
           "password": "${DBPassword}"
         }
 
+
   MyDBInstance:
     Type: AWS::RDS::DBInstance
     UpdateReplacePolicy: Delete
     Properties:
-      DBInstanceIdentifier: DemoDB
+      DBInstanceIdentifier: demo-db
       DBInstanceClass: db.t3.micro
       AllocatedStorage: 20
       Engine: mysql
@@ -56,7 +54,7 @@ Resources:
     Type: AWS::Route53::RecordSet
     Properties:
       HostedZoneId: Z05736022TWK3R2C91ZQB
-      Name: !Sub "${ProjectName}-rds.tonythomasm.com"
+      Name: rds.tonythomasm.com
       Type: CNAME
       TTL: 60
       ResourceRecords:
@@ -71,22 +69,22 @@ Resources:
         - IpProtocol: tcp
           FromPort: 3306
           ToPort: 3306
-          CidrIp: 10.0.0.0/16   #ToDo: Update with export value not hardcoded (Replace with instance sg)
+          SourceSecurityGroupId: !ImportValue InstanceSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !ImportValue BastionHostSecurityGroupId
 
   MyDBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
       DBSubnetGroupDescription: Subnets for RDS
       SubnetIds:
-        - Fn::ImportValue: 
-            Fn::Sub: "${ProjectName}PrivateSubnet1"
-        - Fn::ImportValue: 
-            Fn::Sub: "${ProjectName}PrivateSubnet2"
-        - Fn::ImportValue: 
-            Fn::Sub: "${ProjectName}PrivateSubnet3"
+        - !ImportValue PrivateSubnet1
+        - !ImportValue PrivateSubnet2
+        - !ImportValue PrivateSubnet3
 
 Outputs:
-
   RDSInstanceEndpoint:
     Description: RDS endpoint URL
     Value: !GetAtt MyDBInstance.Endpoint.Address

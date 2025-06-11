@@ -1,0 +1,111 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for Bastion Host in public subnet'
+
+Resources:
+  BastionKeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: bastion-key
+      Tags:
+        - Key: Name
+          Value: bastion-key
+
+  BastionKeyParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: JUMPBOX_KEYPAIR
+      Type: String
+      Value: !Sub "/ec2/keypair/${BastionKeyPair}"
+      Description: Key pair for bastion host access
+
+  BastionIPParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: JUMPBOX_IP
+      Type: String
+      Value: !GetAtt BastionHost.PublicIp
+      Description: Private IP of the bastion host
+
+  BastionHostSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for bastion host
+      VpcId: !ImportValue VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: bastion-sg
+
+  BastionHostRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: bastion-role
+
+  BastionHostInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref BastionHostRole
+
+  BastionHost:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}'
+      InstanceType: t2.nano
+      SubnetId: !ImportValue PublicSubnet1
+      SecurityGroupIds:
+        - !Ref BastionHostSecurityGroup
+      KeyName: !Ref BastionKeyPair
+      IamInstanceProfile: !Ref BastionHostInstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install -y amazon-cloudwatch-agent
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c ssm:AmazonCloudWatch-Config
+      Tags:
+        - Key: Name
+          Value: bastion-host
+
+Outputs:
+  BastionHostId:
+    Description: ID of the Bastion Host
+    Value: !Ref BastionHost
+
+
+  BastionHostPublicIP:
+    Description: Public IP of the Bastion Host
+    Value: !GetAtt BastionHost.PublicIp
+    Export:
+      Name: BastionHostPublicIP
+
+  BastionHostSecurityGroupId:
+    Description: Security Group ID of the Bastion Host
+    Value: !Ref BastionHostSecurityGroup
+    Export:
+      Name: BastionHostSecurityGroupId
+
+  BastionKeyPairName:
+    Description: Name of the created key pair
+    Value: !Ref BastionKeyPair 
